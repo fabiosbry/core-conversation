@@ -277,7 +277,7 @@ export default function CoreConversation() {
     mute();
     muteAudio();
 
-    await new Promise((r) => setTimeout(r, 2400));
+    await new Promise((r) => setTimeout(r, 2600));
 
     sendUserInput(
       `CRITICAL INSTRUCTION: Begin your next message with "Sorry to interrupt, but..." followed by a brief, helpful question or observation.`
