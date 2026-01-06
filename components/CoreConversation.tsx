@@ -76,47 +76,7 @@ export default function CoreConversation() {
   const interruptActiveRef = useRef(false);
   const interruptMutedPhaseRef = useRef(false);
   
-  // LLM Judge refs
-  const turnStartRef = useRef(0);
-  const lastJudgeRef = useRef(0);
-  const judgeAbortRef = useRef<AbortController | null>(null);
-
   const isConnected = readyState === VoiceReadyState.OPEN;
-  
-  // LLM Judge - calls triggerInterrupt() just like keyword detection
-  async function checkLLMInterrupt(speech: string) {
-    if (interruptCooldownRef.current) return;
-    
-    // Need 6+ words and 1.2s+ speaking time
-    const words = speech.split(/\s+/).filter(Boolean).length;
-    if (words < 6) return;
-    
-    const speakingTime = (Date.now() - turnStartRef.current) / 1000;
-    if (speakingTime < 1.2) return;
-    
-    // Debounce 400ms
-    if (Date.now() - lastJudgeRef.current < 400) return;
-    lastJudgeRef.current = Date.now();
-    
-    // Abort previous request
-    judgeAbortRef.current?.abort();
-    judgeAbortRef.current = new AbortController();
-    
-    try {
-      const res = await fetch("/api/judge-speech", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ speech, speakingTime }),
-        signal: judgeAbortRef.current.signal,
-      });
-      const { interrupt } = await res.json();
-      
-      // Same as keyword: just call triggerInterrupt()
-      if (interrupt && !interruptCooldownRef.current) {
-        triggerInterrupt();
-      }
-    } catch {}
-  }
 
   useEffect(() => {
     if (isConnected) {
@@ -157,11 +117,6 @@ export default function CoreConversation() {
       const emotions = extractEmotions(lastMessage);
       const isInterim = (lastMessage as any).interim === true;
       const isInstructionMessage = content.includes("[system:");
-      
-      // Track when user starts speaking
-      if (isInterim && turnStartRef.current === 0) {
-        turnStartRef.current = Date.now();
-      }
 
       setConversation((prev) => {
         const lastConv = prev[prev.length - 1];
@@ -173,7 +128,7 @@ export default function CoreConversation() {
 
       setCurrentEmotions(emotions);
 
-      // Check interrupt keywords (fast path)
+      // Check interrupt keywords
       if (content && !interruptCooldownRef.current) {
         const lower = content.toLowerCase();
         for (const kw of INTERRUPT_KEYWORDS) {
@@ -183,15 +138,9 @@ export default function CoreConversation() {
           }
         }
       }
-      
-      // LLM Judge on interim (same result: calls triggerInterrupt)
-      if (isInterim && content) {
-        checkLLMInterrupt(content);
-      }
 
       if (!isInterim) {
         detectModeKeywords(content);
-        turnStartRef.current = 0; // Reset for next turn
       }
     }
 
@@ -337,8 +286,6 @@ export default function CoreConversation() {
     interruptCooldownRef.current = false;
     interruptActiveRef.current = false;
     interruptMutedPhaseRef.current = false;
-    turnStartRef.current = 0;
-    lastJudgeRef.current = 0;
 
     try {
       const response = await fetch("/api/hume-token");
@@ -365,9 +312,6 @@ export default function CoreConversation() {
     interruptCooldownRef.current = false;
     interruptActiveRef.current = false;
     interruptMutedPhaseRef.current = false;
-    turnStartRef.current = 0;
-    lastJudgeRef.current = 0;
-    judgeAbortRef.current?.abort();
   }
 
   const visualizerBars = isConnected && !isPaused ? (isMuted ? fft : micFft) : [];
