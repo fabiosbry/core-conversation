@@ -113,7 +113,6 @@ export default function CoreConversation() {
       
       // Same as keyword: just call triggerInterrupt()
       if (interrupt && !interruptCooldownRef.current) {
-        console.log("🛑 LLM INTERRUPT detected");
         triggerInterrupt();
       }
     } catch {}
@@ -179,7 +178,6 @@ export default function CoreConversation() {
         const lower = content.toLowerCase();
         for (const kw of INTERRUPT_KEYWORDS) {
           if (lower.includes(kw)) {
-            console.log(`🛑 KEYWORD INTERRUPT: "${kw}" detected`);
             triggerInterrupt();
             break;
           }
@@ -280,14 +278,11 @@ export default function CoreConversation() {
     interruptActiveRef.current = true;
     interruptMutedPhaseRef.current = true;
 
-    console.log("🛑 INTERRUPT START");
-
     mute();
     muteAudio();
 
     // STEP 1: Wait 100ms then send "ok" prime to make AI respond fast
     await new Promise((r) => setTimeout(r, 100));
-    console.log("🎯 Sending 'ok' prime...");
     sendUserInput(
       `CRITICAL INSTRUCTION: YOUR NEXT MESSAGE MUST BE "ok" nothing else, end there, just "ok".`
     );
