@@ -293,7 +293,7 @@ export default function CoreConversation() {
     );
 
     // STEP 2: Reduced wait time since AI should respond with "ok" very fast
-    const pauseTime = window.innerWidth < 768 ? 700 : 450;
+    const pauseTime = window.innerWidth < 768 ? 900 : 650;
     await new Promise((r) => setTimeout(r, pauseTime));
 
     // STEP 3: Now send the actual interrupt prompt
