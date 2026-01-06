@@ -405,7 +405,7 @@ export default function CoreConversation() {
             className="flex items-center gap-2 md:gap-4"
           >
             <h1 className="text-lg md:text-2xl font-semibold tracking-tight text-white">
-              Core Conversation
+              peoplemakethings
             </h1>
             {isConnected && (
               <motion.div

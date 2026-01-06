@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "EVI Conversational Agent",
-  description: "A clean conversational voice AI agent",
+  title: "peoplemakethings",
+  description: "Voice AI conversation agent",
 };
 
 export default function RootLayout({
