@@ -69,6 +69,7 @@ export default function CoreConversation() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
   const [showHeadphoneTip, setShowHeadphoneTip] = useState(false);
+  const [showFeatureTip, setShowFeatureTip] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pauseResumeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const interruptCooldownRef = useRef(false);
@@ -121,10 +122,17 @@ export default function CoreConversation() {
   useEffect(() => {
     if (isConnected) {
       setIsConnecting(false);
+      // Show headphone tip on mobile
       if (window.innerWidth < 768) {
         setShowHeadphoneTip(true);
         setTimeout(() => setShowHeadphoneTip(false), 5000);
       }
+      // Show feature tip on both mobile and desktop (after headphone tip on mobile)
+      const featureTipDelay = window.innerWidth < 768 ? 5500 : 500;
+      setTimeout(() => {
+        setShowFeatureTip(true);
+        setTimeout(() => setShowFeatureTip(false), 8000);
+      }, featureTipDelay);
     }
   }, [isConnected]);
 
@@ -277,12 +285,20 @@ export default function CoreConversation() {
     mute();
     muteAudio();
 
-    // Mobile needs longer pause (4s) vs desktop (2.6s)
-    const pauseTime = window.innerWidth < 768 ? 4000 : 2600;
+    // STEP 1: Wait 100ms then send "ok" prime to make AI respond fast
+    await new Promise((r) => setTimeout(r, 100));
+    console.log("🎯 Sending 'ok' prime...");
+    sendUserInput(
+      `CRITICAL INSTRUCTION: YOUR NEXT MESSAGE MUST BE "ok" nothing else, end there, just "ok".`
+    );
+
+    // STEP 2: Reduced wait time since AI should respond with "ok" very fast
+    const pauseTime = window.innerWidth < 768 ? 700 : 450;
     await new Promise((r) => setTimeout(r, pauseTime));
 
+    // STEP 3: Now send the actual interrupt prompt
     sendUserInput(
-      `CRITICAL INSTRUCTION: Begin your next message with "Sorry to interrupt, but..." followed by a brief, helpful question or observation.`
+      `CRITICAL INSTRUCTION: Begin your next message with "Sorry to interrupt, but..." then ask a brief question or make an observation that directly relates to what the user was just talking about. Reference specific details from their recent messages to show you're engaged with their actual topic. Keep it concise but personalized to the conversation context.`
     );
 
     await new Promise((r) => setTimeout(r, 500));
@@ -664,6 +680,27 @@ export default function CoreConversation() {
             >
               <div className="glass rounded-xl px-4 py-3 text-center cursor-pointer" onClick={() => setShowHeadphoneTip(false)}>
                 <p className="text-white/70 text-xs">🎧 Use headphones for best experience</p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Feature tip for both mobile and desktop */}
+        <AnimatePresence>
+          {showFeatureTip && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="absolute top-24 left-4 right-4 md:left-1/2 md:right-auto md:-translate-x-1/2 md:max-w-md"
+            >
+              <div className="glass rounded-xl px-4 py-3 cursor-pointer" onClick={() => setShowFeatureTip(false)}>
+                <div className="text-white/80 text-xs md:text-sm text-center leading-relaxed">
+                  <p className="text-white mb-2">💡 Try getting me to:</p>
+                  <p>• hold my response</p>
+                  <p>• adjust verbosity</p>
+                  <p>• interrupt you</p>
+                </div>
               </div>
             </motion.div>
           )}
