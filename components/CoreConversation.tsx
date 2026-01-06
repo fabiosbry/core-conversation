@@ -156,7 +156,7 @@ export default function CoreConversation() {
       const content = (lastMessage as any).message?.content || "";
       const emotions = extractEmotions(lastMessage);
       const isInterim = (lastMessage as any).interim === true;
-      const isInstructionMessage = content.includes("CRITICAL INSTRUCTION");
+      const isInstructionMessage = content.includes("[system:");
       
       // Track when user starts speaking
       if (isInterim && turnStartRef.current === 0) {
