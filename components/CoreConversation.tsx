@@ -277,8 +277,8 @@ export default function CoreConversation() {
     mute();
     muteAudio();
 
-    // Mobile needs longer pause (3s) vs desktop (2.6s)
-    const pauseTime = window.innerWidth < 768 ? 3000 : 2600;
+    // Mobile needs longer pause (4s) vs desktop (2.6s)
+    const pauseTime = window.innerWidth < 768 ? 4000 : 2600;
     await new Promise((r) => setTimeout(r, pauseTime));
 
     sendUserInput(
