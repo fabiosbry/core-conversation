@@ -70,13 +70,36 @@ export default function CoreConversation() {
   const [showTranscript, setShowTranscript] = useState(false);
   const [showHeadphoneTip, setShowHeadphoneTip] = useState(false);
   const [showFeatureTip, setShowFeatureTip] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pauseResumeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const interruptCooldownRef = useRef(false);
   const interruptActiveRef = useRef(false);
   const interruptMutedPhaseRef = useRef(false);
+  const conversationRef = useRef<Message[]>([]);
+  const lastAssistantContentRef = useRef("");
+  const memoryUpdateQueueRef = useRef(Promise.resolve());
   
   const isConnected = readyState === VoiceReadyState.OPEN;
+
+  useEffect(() => {
+    conversationRef.current = conversation;
+  }, [conversation]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const existing = window.localStorage.getItem("pm_memory_session_id");
+    if (existing) {
+      setSessionId(existing);
+      return;
+    }
+    const generated =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `session_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    window.localStorage.setItem("pm_memory_session_id", generated);
+    setSessionId(generated);
+  }, []);
 
   useEffect(() => {
     if (isConnected) {
@@ -94,6 +117,11 @@ export default function CoreConversation() {
       }, featureTipDelay);
     }
   }, [isConnected]);
+
+  useEffect(() => {
+    if (!isConnected || !sessionId) return;
+    void loadMemory(sessionId);
+  }, [isConnected, sessionId]);
 
   // Auto-scroll transcript
   useEffect(() => {
@@ -139,14 +167,19 @@ export default function CoreConversation() {
         }
       }
 
-      if (!isInterim) {
+      if (!isInterim && !isInstructionMessage) {
         detectModeKeywords(content);
+        enqueueMemoryUpdate(() => analyzeUserAnswer(content));
       }
     }
 
     if (lastMessage.type === "assistant_message") {
       const content = (lastMessage as any).message?.content || "";
       const shouldHide = isPaused || interruptMutedPhaseRef.current;
+
+      lastAssistantContentRef.current = lastAssistantContentRef.current
+        ? `${lastAssistantContentRef.current} ${content}`
+        : content;
 
       setConversation((prev) => {
         const lastConv = prev[prev.length - 1];
@@ -158,6 +191,14 @@ export default function CoreConversation() {
         }
         return [...prev, { role: "assistant", content, timestamp: new Date(), hidden: shouldHide }];
       });
+    }
+
+    if (lastMessage.type === "assistant_end") {
+      const finalContent = lastAssistantContentRef.current.trim();
+      if (finalContent) {
+        enqueueMemoryUpdate(() => appendAssistantTranscript(finalContent));
+      }
+      lastAssistantContentRef.current = "";
     }
   }, [messages, isPaused]);
 
@@ -219,6 +260,85 @@ export default function CoreConversation() {
         return;
       }
     }
+  }
+
+  function enqueueMemoryUpdate(task: () => Promise<void>) {
+    memoryUpdateQueueRef.current = memoryUpdateQueueRef.current
+      .then(task)
+      .catch((error) => {
+        console.error("Memory update error:", error);
+      });
+  }
+
+  function buildPersistentContext(memory: unknown, followup?: unknown) {
+    const parts = ["PERSISTENT_MEMORY_JSON:", JSON.stringify(memory)];
+    if (followup) {
+      parts.push("FOLLOWUP_SIGNAL:", JSON.stringify(followup));
+    }
+    return parts.join("\n");
+  }
+
+  async function loadMemory(activeSessionId: string) {
+    const response = await fetch(
+      `/api/memory?sessionId=${encodeURIComponent(activeSessionId)}`
+    );
+    if (!response.ok) return;
+    const data = await response.json();
+    if (!data?.memory) return;
+    sendSessionSettings({
+      context: { text: buildPersistentContext(data.memory), type: "persistent" as any },
+    });
+  }
+
+  function buildConversationHistory(latestUserText?: string) {
+    const history = conversationRef.current
+      .filter((message) => !message.hidden)
+      .map((message) => ({ role: message.role, content: message.content }));
+    const last = history[history.length - 1];
+    if (latestUserText && (!last || last.role !== "user" || last.content !== latestUserText)) {
+      history.push({ role: "user", content: latestUserText });
+    }
+    return history.slice(-6);
+  }
+
+  async function analyzeUserAnswer(transcript: string) {
+    if (!sessionId || !transcript.trim()) return;
+
+    const response = await fetch("/api/analyze-answer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        transcript,
+        conversationHistory: buildConversationHistory(transcript),
+      }),
+    });
+
+    if (!response.ok) return;
+    const data = await response.json();
+    if (!data?.memory) return;
+    sendSessionSettings({
+      context: {
+        text: buildPersistentContext(data.memory, data.followup),
+        type: "persistent" as any,
+      },
+    });
+  }
+
+  async function appendAssistantTranscript(transcript: string) {
+    if (!sessionId || !transcript.trim()) return;
+    await fetch("/api/memory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        entry: {
+          role: "assistant",
+          content: transcript,
+          timestamp: new Date().toISOString(),
+        },
+      }),
+    });
   }
 
   async function triggerInterrupt() {
@@ -312,6 +432,7 @@ export default function CoreConversation() {
     interruptCooldownRef.current = false;
     interruptActiveRef.current = false;
     interruptMutedPhaseRef.current = false;
+    lastAssistantContentRef.current = "";
   }
 
   const visualizerBars = isConnected && !isPaused ? (isMuted ? fft : micFft) : [];
